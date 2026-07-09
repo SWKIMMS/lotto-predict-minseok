@@ -111,6 +111,14 @@ h2 {
   line-height: 1.25;
 }
 
+.data-note {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
 .source-badge {
   min-width: 132px;
   padding: 14px 16px;

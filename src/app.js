@@ -12,6 +12,8 @@
     purchaseMode: true
   };
 
+  const TICKET_LABELS = ["A", "B", "C", "D", "E"];
+
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
@@ -411,6 +413,7 @@
   function renderSummary(stats) {
     $("#latest-draw").textContent = stats.latest ? `${stats.latest.draw}회` : "-";
     $("#latest-date").textContent = formatDate(stats.latest?.date);
+    $("#data-note").textContent = stats.latest ? `${stats.latest.draw}회까지 반영` : "-";
     $("#draw-count").textContent = `${draws.length.toLocaleString("ko-KR")}회`;
     $("#average-sum").textContent = Math.round(stats.averageSum).toString();
     $("#sum-band").textContent = `권장 합계 ${stats.sumLow}~${stats.sumHigh}`;
@@ -482,7 +485,7 @@
         return `
           <article class="recommendation-card">
             <div class="recommendation-top">
-              <span class="rank">${index + 1}</span>
+              <span class="rank">${TICKET_LABELS[index] ?? index + 1}</span>
               <div class="balls">${renderBalls(item.numbers)}</div>
               <div class="score">
                 <strong>${score}</strong>
