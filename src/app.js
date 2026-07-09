@@ -220,6 +220,38 @@
     return numbers.some((number, index) => index > 0 && number - numbers[index - 1] === 1);
   }
 
+  function longestConsecutiveRun(numbers) {
+    let longest = 1;
+    let current = 1;
+
+    for (let index = 1; index < numbers.length; index += 1) {
+      if (numbers[index] - numbers[index - 1] === 1) {
+        current += 1;
+        longest = Math.max(longest, current);
+      } else {
+        current = 1;
+      }
+    }
+
+    return longest;
+  }
+
+  function pairKeys(numbers) {
+    const keys = [];
+
+    for (let i = 0; i < numbers.length; i += 1) {
+      for (let j = i + 1; j < numbers.length; j += 1) {
+        keys.push(`${numbers[i]}-${numbers[j]}`);
+      }
+    }
+
+    return keys;
+  }
+
+  function overlapCount(left, right) {
+    return left.filter((number) => right.includes(number)).length;
+  }
+
   function makeCandidate(baseWeights, stats) {
     const selected = [];
     const pool = Array.from({ length: 45 }, (_, index) => index + 1);
@@ -250,6 +282,10 @@
       groupCounts[Math.min(4, Math.floor((number - 1) / 10))] += 1;
     });
     const activeGroups = groupCounts.filter(Boolean).length;
+    const maxGroupCount = Math.max(...groupCounts);
+    const birthdayCount = numbers.filter((number) => number <= 31).length;
+    const multiplesOfFive = numbers.filter((number) => number % 5 === 0).length;
+    const runLength = longestConsecutiveRun(numbers);
 
     const sumScore = clamp(1 - Math.abs(sum - stats.averageSum) / Math.max(stats.sumStd * 2.1, 1), 0, 1);
     const oddScore = stats.oddHistogram[oddCount] / Math.max(...stats.oddHistogram);
@@ -269,24 +305,33 @@
     pairScore = pairTotal ? pairScore / pairTotal : 0;
     const rangeScore = clamp(1 - Math.abs(range - 34) / 24, 0, 1);
     const endingScore = clamp(endings / 6, 0, 1);
+    const groupSpreadScore = 0.62 * clamp(activeGroups / 4, 0, 1) + 0.38 * clamp(1 - Math.max(0, maxGroupCount - 2) / 4, 0, 1);
     const mixScore =
       0.34 * clamp(1 - Math.abs(hotHits - 2) / 3, 0, 1) +
       0.30 * clamp(1 - Math.abs(overdueHits - 2) / 3, 0, 1) +
       0.18 * clamp(1 - Math.abs(coldHits - 1) / 3, 0, 1) +
-      0.18 * clamp(activeGroups / 4, 0, 1);
+      0.18 * groupSpreadScore;
     const overheatPenalty = topSixHits >= 3 ? 0.12 : hotHits >= 5 ? 0.10 : 0;
+    const publicPatternPenalty =
+      (birthdayCount === 6 ? 0.08 : birthdayCount === 5 ? 0.045 : 0) +
+      (runLength >= 4 ? 0.06 : runLength === 3 ? 0.03 : 0) +
+      (multiplesOfFive >= 4 ? 0.035 : 0) +
+      (maxGroupCount >= 4 ? 0.045 : 0) +
+      (endings <= 3 ? 0.035 : 0);
     const consecutivePenalty = !state.allowConsecutive && hasConsecutive(numbers) ? 0.22 : 0;
 
     const total =
       0.22 * sumScore +
       0.15 * oddScore +
       0.12 * lowScore +
-      0.16 * frequencyScore +
-      0.08 * pairScore +
+      0.14 * frequencyScore +
+      0.04 * pairScore +
       0.08 * rangeScore +
       0.06 * endingScore +
+      0.10 * groupSpreadScore +
       0.13 * mixScore -
       overheatPenalty -
+      publicPatternPenalty -
       consecutivePenalty;
 
     return {
@@ -298,8 +343,25 @@
       overdueHits,
       coldHits,
       pairScore,
-      range
+      range,
+      groupSpreadScore
     };
+  }
+
+  function portfolioScore(candidate, selected, numberUse, usedPairs) {
+    if (!selected.length) return candidate.score;
+
+    const overlapPenalty = selected.reduce((total, item) => {
+      const overlap = overlapCount(candidate.numbers, item.numbers);
+      if (overlap >= 4) return total + 0.16;
+      if (overlap === 3) return total + 0.07;
+      return total + overlap * 0.012;
+    }, 0);
+    const reusedNumberPenalty =
+      candidate.numbers.reduce((total, number) => total + (numberUse.get(number) ?? 0), 0) * 0.01;
+    const reusedPairPenalty = pairKeys(candidate.numbers).filter((key) => usedPairs.has(key)).length * 0.018;
+
+    return candidate.score - overlapPenalty - reusedNumberPenalty - reusedPairPenalty;
   }
 
   function generateRecommendations(stats, history) {
@@ -319,13 +381,32 @@
     scored.sort((a, b) => b.score - a.score);
 
     const selected = [];
-    for (const candidate of scored) {
-      const tooSimilar = selected.some((item) => {
-        const overlap = item.numbers.filter((number) => candidate.numbers.includes(number)).length;
-        return overlap >= 5;
+    const selectedKeys = new Set();
+    const numberUse = new Map();
+    const usedPairs = new Set();
+    const candidatePool = scored.slice(0, Math.max(280, state.setCount * 140));
+
+    while (selected.length < state.setCount && candidatePool.length) {
+      let bestIndex = 0;
+      let bestScore = -Infinity;
+
+      candidatePool.forEach((candidate, index) => {
+        const key = candidate.numbers.join("-");
+        if (selectedKeys.has(key)) return;
+        const adjustedScore = portfolioScore(candidate, selected, numberUse, usedPairs);
+        if (adjustedScore > bestScore) {
+          bestScore = adjustedScore;
+          bestIndex = index;
+        }
       });
-      if (!tooSimilar) selected.push(candidate);
-      if (selected.length >= state.setCount) break;
+
+      const [picked] = candidatePool.splice(bestIndex, 1);
+      selected.push(picked);
+      selectedKeys.add(picked.numbers.join("-"));
+      picked.numbers.forEach((number) => {
+        numberUse.set(number, (numberUse.get(number) ?? 0) + 1);
+      });
+      pairKeys(picked.numbers).forEach((key) => usedPairs.add(key));
     }
 
     return selected;
