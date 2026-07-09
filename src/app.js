@@ -313,7 +313,7 @@
       0.18 * groupSpreadScore;
     const overheatPenalty = topSixHits >= 3 ? 0.12 : hotHits >= 5 ? 0.10 : 0;
     const publicPatternPenalty =
-      (birthdayCount === 6 ? 0.08 : birthdayCount === 5 ? 0.045 : 0) +
+      (birthdayCount === 6 ? 0.10 : birthdayCount === 5 ? 0.06 : 0) +
       (runLength >= 4 ? 0.06 : runLength === 3 ? 0.03 : 0) +
       (multiplesOfFive >= 4 ? 0.035 : 0) +
       (maxGroupCount >= 4 ? 0.045 : 0) +
@@ -353,13 +353,14 @@
 
     const overlapPenalty = selected.reduce((total, item) => {
       const overlap = overlapCount(candidate.numbers, item.numbers);
-      if (overlap >= 4) return total + 0.16;
-      if (overlap === 3) return total + 0.07;
-      return total + overlap * 0.012;
+      if (overlap >= 4) return total + 0.24;
+      if (overlap === 3) return total + 0.13;
+      if (overlap === 2) return total + 0.075;
+      return total + overlap * 0.018;
     }, 0);
     const reusedNumberPenalty =
-      candidate.numbers.reduce((total, number) => total + (numberUse.get(number) ?? 0), 0) * 0.01;
-    const reusedPairPenalty = pairKeys(candidate.numbers).filter((key) => usedPairs.has(key)).length * 0.018;
+      candidate.numbers.reduce((total, number) => total + (numberUse.get(number) ?? 0), 0) * 0.014;
+    const reusedPairPenalty = pairKeys(candidate.numbers).filter((key) => usedPairs.has(key)).length * 0.026;
 
     return candidate.score - overlapPenalty - reusedNumberPenalty - reusedPairPenalty;
   }
