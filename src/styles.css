@@ -172,6 +172,27 @@ h2 {
   font-weight: 800;
 }
 
+.count-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.count-option {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.36);
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.count-option.active {
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--accent);
+  box-shadow: 0 6px 18px rgba(23, 33, 47, 0.08);
+}
+
 .action-stack {
   display: grid;
   gap: 8px;
@@ -248,10 +269,11 @@ h2 {
 
 .rank {
   display: grid;
-  width: 34px;
+  min-width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 50%;
+  padding: 0 9px;
+  border-radius: 999px;
   background: #17212f;
   color: #fff;
   font-size: 0.82rem;
@@ -535,6 +557,10 @@ h2 {
     padding: 14px;
   }
 
+  .count-option {
+    min-height: 42px;
+  }
+
   .primary-action {
     min-height: 46px;
   }
@@ -564,8 +590,9 @@ h2 {
   }
 
   .rank {
-    width: 30px;
+    min-width: 30px;
     height: 30px;
+    padding: 0 8px;
     margin-top: 4px;
   }
 

@@ -9,13 +9,40 @@
     sampleSize: 6000,
     allowConsecutive: true,
     includeBonus: false,
-    purchaseMode: true
+    purchaseMode: true,
+    seed: 0
   };
 
   const TICKET_LABELS = ["A", "B", "C", "D", "E"];
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+  }
+
+  function hashSeed(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function makeRng(seedText) {
+    let seed = hashSeed(seedText);
+    return () => {
+      seed += 0x6d2b79f5;
+      let value = seed;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function ticketLabel(index) {
+    const letter = TICKET_LABELS[index % TICKET_LABELS.length];
+    const slip = Math.floor(index / TICKET_LABELS.length) + 1;
+    return state.setCount <= TICKET_LABELS.length ? letter : `${slip}${letter}`;
   }
 
   function ballClass(number) {
@@ -190,14 +217,14 @@
     return weights;
   }
 
-  function pickWeighted(pool, selected, baseWeights, stats) {
+  function pickWeighted(pool, selected, baseWeights, stats, rng) {
     const maxPair = Math.max(...stats.pairs.slice(0, 40).map((pair) => pair.count), 1);
     const entries = pool.map((number) => {
       const pairAffinity = selected.length
         ? selected.reduce((total, chosen) => total + stats.pairCounts[number][chosen] / maxPair, 0) /
           selected.length
         : 0;
-      const jitter = 0.78 + Math.random() * 0.44;
+      const jitter = 0.78 + rng() * 0.44;
       return {
         number,
         weight: baseWeights[number] * (1 + pairAffinity * 0.12) * jitter
@@ -205,7 +232,7 @@
     });
 
     const totalWeight = entries.reduce((total, item) => total + item.weight, 0);
-    let cursor = Math.random() * totalWeight;
+    let cursor = rng() * totalWeight;
     for (const item of entries) {
       cursor -= item.weight;
       if (cursor <= 0) return item.number;
@@ -249,12 +276,12 @@
     return left.filter((number) => right.includes(number)).length;
   }
 
-  function makeCandidate(baseWeights, stats) {
+  function makeCandidate(baseWeights, stats, rng) {
     const selected = [];
     const pool = Array.from({ length: 45 }, (_, index) => index + 1);
 
     while (selected.length < 6) {
-      const picked = pickWeighted(pool, selected, baseWeights, stats);
+      const picked = pickWeighted(pool, selected, baseWeights, stats, rng);
       selected.push(picked);
       pool.splice(pool.indexOf(picked), 1);
     }
@@ -366,9 +393,11 @@
     const baseWeights = createBaseWeights(stats, history);
     const seen = new Set();
     const scored = [];
+    const rng = makeRng(`${stats.latestDraw}:${state.setCount}:${state.seed}`);
+    const sampleBudget = Math.max(state.sampleSize, state.setCount * 900);
 
-    for (let index = 0; index < state.sampleSize; index += 1) {
-      const numbers = makeCandidate(baseWeights, stats);
+    for (let index = 0; index < sampleBudget; index += 1) {
+      const numbers = makeCandidate(baseWeights, stats, rng);
       if (!state.allowConsecutive && hasConsecutive(numbers)) continue;
       const key = numbers.join("-");
       if (seen.has(key)) continue;
@@ -485,7 +514,7 @@
         return `
           <article class="recommendation-card">
             <div class="recommendation-top">
-              <span class="rank">${TICKET_LABELS[index] ?? index + 1}</span>
+              <span class="rank">${ticketLabel(index)}</span>
               <div class="balls">${renderBalls(item.numbers)}</div>
               <div class="score">
                 <strong>${score}</strong>
@@ -517,8 +546,13 @@
   }
 
   function syncControls() {
-    $("#strategy-note").textContent = "5조합";
+    $("#strategy-note").textContent = `${state.setCount}조합`;
     $("#purchase-mode").setAttribute("aria-pressed", state.purchaseMode ? "true" : "false");
+    $$(".count-option").forEach((button) => {
+      const active = Number(button.dataset.count) === state.setCount;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
   }
 
   function render() {
@@ -539,13 +573,21 @@
   }
 
   function bindEvents() {
+    $$(".count-option").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.setCount = Number(button.dataset.count);
+        state.seed = 0;
+        render();
+      });
+    });
+
     $("#purchase-mode").addEventListener("click", () => {
       state.mode = "balanced";
-      state.setCount = 5;
       state.sampleSize = 6000;
       state.allowConsecutive = true;
       state.includeBonus = false;
       state.purchaseMode = true;
+      state.seed += 1;
       render();
     });
   }
